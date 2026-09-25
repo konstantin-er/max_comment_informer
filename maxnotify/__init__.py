@@ -1,0 +1,1 @@
+"""MAX channel comment notifications."""

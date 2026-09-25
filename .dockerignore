@@ -1,0 +1,11 @@
+.env
+.env.*
+!.env.example
+.git
+*.db
+*.sqlite*
+*.pem
+*.key
+__pycache__/
+tests/
+docs/
