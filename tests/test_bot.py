@@ -32,7 +32,7 @@ class FakeApi:
         return {"title": "Канал", "link": "https://max.ru/channel"}
 
     def get_message(self, post_id):
-        return {"url": "https://max.ru/post"}
+        return {"url": "https://max.ru/post", "body": {"text": "Текст   поста\nс <тегом>"}}
 
     def send_message(self, user_id, body):
         self.sent.append((user_id, body))
@@ -65,10 +65,24 @@ class BotTests(unittest.TestCase):
         self.bot.handle(COMMENT)
         self.assertEqual([user for user, _ in self.api.sent], [7])
         body = self.api.sent[0][1]
-        self.assertIn("Автор", body["text"])
-        self.assertIn("Канал", body["text"])
-        self.assertIn("Привет", body["text"])
+        self.assertEqual(body["format"], "html")
+        self.assertEqual(body["text"], (
+            "💬 <b>Новый комментарий</b>\n\n"
+            '📢 Канал: <b><a href="https://max.ru/channel">Канал</a></b>\n'
+            '📝 Пост: <a href="https://max.ru/post">«Текст поста с &lt;тегом&gt;»</a>\n'
+            '👤 Автор: <a href="https://max.ru/author">Автор</a>\n\n'
+            "Привет"))
         self.assertEqual(body["attachments"][0]["payload"]["buttons"][0][0]["url"], "https://max.ru/post")
+
+    def test_long_post_is_truncated_and_missing_text_has_fallback(self):
+        self.store.start_user(7)
+        self.api.get_message = lambda post_id: {"url": "https://max.ru/post", "body": {"text": "я" * 200}}
+        self.bot.handle(COMMENT)
+        self.assertIn("я" * 79 + "…»", self.api.sent[0][1]["text"])
+        self.api.get_message = lambda post_id: {"url": "https://max.ru/post", "body": {"attachments": [{}]}}
+        comment = {**COMMENT, "message": {**COMMENT["message"], "body": {"mid": "mid.c2", "text": "Ещё"}}}
+        self.bot.handle(comment)
+        self.assertIn("пост с вложением</a>", self.api.sent[1][1]["text"])
 
     def test_banned_author_is_deleted_without_notification(self):
         self.store.start_user(7)

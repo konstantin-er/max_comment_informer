@@ -30,6 +30,22 @@ def comment_from_update(update):
             "author_id": int(author_id), "sender": sender, "text": body.get("text") or "(без текста)"}
 
 
+def preview(value, limit):
+    """Collapse whitespace, cut to `limit` characters and HTML-escape the result."""
+    value = " ".join(str(value or "").split())
+    if len(value) > limit:
+        value = value[:limit - 1].rstrip() + "…"
+    return html.escape(value)
+
+
+def post_preview(post, limit=80):
+    body = post.get("body") or {}
+    text = body.get("text") if isinstance(body.get("text"), str) else ""
+    if text.strip():
+        return f"«{preview(text, limit)}»"
+    return "пост с вложением" if body.get("attachments") else ""
+
+
 def keyboard(notification_id, post_url, expanded=False, status="new"):
     buttons = []
     first_row = []
@@ -80,11 +96,14 @@ class Bot:
             self._callback(update)
 
     def welcome_text(self):
-        return ("Привет! Я сообщаю администраторам о новых комментариях к постам канала.\n\n"
-                f"Добавьте меня в нужный канал: https://max.ru/{self.bot_username}\n"
-                "Назначьте администратором с правами читать сообщения и удалять комментарии. "
-                "Включите комментарии в настройках канала. Каждый администратор, которому нужны уведомления, должен нажать «Начать» в этом боте.\n\n"
-                "В уведомлении можно перейти к посту, удалить комментарий или включить автоудаление новых комментариев автора.")
+        return ("👋 Привет! Я сообщаю администраторам о новых комментариях к постам канала.\n\n"
+                "Как подключить:\n"
+                f"1. Добавьте меня в канал: https://max.ru/{self.bot_username}\n"
+                "2. Назначьте администратором с правами читать сообщения и удалять комментарии.\n"
+                "3. Включите комментарии в настройках канала.\n"
+                "4. Каждый администратор, которому нужны уведомления, должен нажать «Начать» в этом боте.\n\n"
+                "В каждом уведомлении видно канал, пост, автора и текст комментария. "
+                "Кнопки позволяют перейти к посту, удалить комментарий или включить автоудаление новых комментариев автора.")
 
     def _comment(self, update):
         comment = comment_from_update(update)
@@ -111,8 +130,15 @@ class Bot:
         title = html.escape(chat.get("title") or str(chat_id))
         if safe_url(chat.get("link")):
             title = f'<a href="{html.escape(chat["link"], quote=True)}">{title}</a>'
-        post_label = f'<a href="{html.escape(post_url, quote=True)}">Пост</a>' if post_url else "Пост"
-        text = f"💬 Новый комментарий\nОт: {author}\nКанал: {title}\n{post_label}\n\n{html.escape(comment['text'][:3000])}"
+        snippet = post_preview(post)
+        post_label = snippet or "пост"
+        if post_url:
+            post_label = f'<a href="{html.escape(post_url, quote=True)}">{post_label}</a>'
+        text = (f"💬 <b>Новый комментарий</b>\n\n"
+                f"📢 Канал: <b>{title}</b>\n"
+                f"📝 Пост: {post_label}\n"
+                f"👤 Автор: {author}\n\n"
+                f"{html.escape(comment['text'][:3000])}")
         for user_id in recipients:
             note = self.store.add_notification(chat_id, user_id, comment["author_id"], comment["post_id"], comment["comment_id"], text, post_url)
             if note["message_id"]:
